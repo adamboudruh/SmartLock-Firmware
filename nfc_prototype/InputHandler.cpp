@@ -4,6 +4,7 @@
 #include "Helpers.h"
 #include "OutputHandler.h"
 #include "WiFiHandler.h"
+#include "Whitelist.h"
 #include <Arduino.h>
 
 #define REED_PIN 13
@@ -23,12 +24,10 @@ unsigned long lastScanTs = 0;
 const unsigned long RFID_DEBOUNCE_MS = 2000;
 
 // Define the whitelist array and its size
-const Tag whitelist[] = {
-  {"Green", "046AF0603E6180"},
-  {"Red",   "04C9B7603E6180"}
-};
-
-const int whitelistSize = sizeof(whitelist) / sizeof(whitelist[0]);
+// const Tag whitelist[] = {
+//   {"Green", "046AF0603E6180"},
+//   {"Red",   "04C9B7603E6180"}
+// };
 
 void initialReedSetup() {
 	lastSwitchReading = digitalRead(REED_PIN);
@@ -79,14 +78,13 @@ bool handleRfidTag(const String& uid) {
   lastScanTs = now;
 
   // Rest of your existing logic below, unchanged
-  for (int i = 0; i < whitelistSize; i++) {
-    if (uid.equalsIgnoreCase(whitelist[i].uid)) {
-      Serial.printf("Match: %s tag -> UNLOCK\n", whitelist[i].name);
-      pendingUnlock = true;
-      isLocked = false;
-      sendStateEvent("UNLOCK_SUCCESS", uid.c_str());
-      return true;
-    }
+  String keyName;
+  if (checkUID(uid, keyName)) {
+    Serial.printf("Match: %s -> UNLOCK\n", keyName.c_str());
+    pendingUnlock = true;
+    isLocked = false;
+    sendStateEvent("UNLOCK_SUCCESS", uid.c_str());
+    return true;
   }
   Serial.println("No match: unknown tag");
   sendStateEvent("FAIL_UNLOCK", uid.c_str());
@@ -123,6 +121,7 @@ void handleStateButton() {
           isLocked ? "LOCKED" : "UNLOCKED",
           isAjar   ? "AJAR"   : "CLOSED"
       );
+      printWhitelist();
       lastButtonPress = millis();
     }
   }

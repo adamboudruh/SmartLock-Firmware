@@ -6,6 +6,7 @@
 #include "WiFiHandler.h"
 #include "Helpers.h"
 #include "PendingCommands.h"
+#include "Whitelist.h"
 #include <Arduino.h>
 
 #define RST_PIN 22
@@ -42,6 +43,8 @@ void setup() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 
   Serial.println("RC522 ready. Tap a card to match against green/red tags...");
+
+  loadWhitelist();  // load whitelist from flash to memory
 
   initWifi();
   initWebSocket();

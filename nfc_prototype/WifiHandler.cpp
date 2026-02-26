@@ -2,6 +2,7 @@
 #include <ArduinoJson.h>
 #include <WiFi.h> // Use ESP8266WiFi.h if using ESP8266
 #include "WiFiHandler.h"
+#include "Whitelist.h"
 #include "PendingCommands.h" // for queueing locks and unlocks
 #include "OutputHandler.h"
 
@@ -46,6 +47,9 @@ void onMessageCallback(WebsocketsMessage message) {
         Serial.println("[Command] UNLOCK received. Unlocking the relay.");
         pendingUnlock = true; // Deactivate the relay (unlock)
         isLocked = false;
+    } else if (strcmp(action, "SYNC") == 0) {
+        Serial.println("[Command] SYNC received. Saving new whitelist in memory.");
+        saveWhitelist(doc["whitelist"]);
     } else {
         Serial.println("[WebSocket] Unknown action received.");
     }
