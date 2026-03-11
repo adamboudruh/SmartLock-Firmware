@@ -1,19 +1,19 @@
 #include <SPI.h>
 #include <MFRC522.h>
-#include "Tag.h"
 #include "InputHandler.h"
 #include "OutputHandler.h"
 #include "WiFiHandler.h"
 #include "Helpers.h"
 #include "PendingCommands.h"
 #include "Whitelist.h"
+#include "Status.h"
 #include <Arduino.h>
 
 #define RST_PIN 22
 #define SS_PIN  5
 #define REED_PIN 13
 #define BUTTON_PIN 12
-const int  RELAY_PIN  = 15;     // INx to your relay channel
+const int  RELAY_PIN  = 26;     // INx to your relay channel
 
 
 const bool REINIT_AFTER_RELAY = true; // set true to re-init RC522 after relay action if noise causes hangs
@@ -28,6 +28,9 @@ void setup() {
   Serial.begin(115200);
   SPI.begin();
   mfrc522.PCD_Init();
+
+  // initialize the status LED
+  initStatus();
   
 	// going out to relay module to control solenoid
   pinMode(RELAY_PIN, OUTPUT);
@@ -46,11 +49,14 @@ void setup() {
 
   loadWhitelist();  // load whitelist from flash to memory
 
+  setStatus(StatusMode::Connecting);
   initWifi();
   initWebSocket();
 }
 
 void loop() {
+  // Update the LED status
+  updateStatus();
 
   // Reed switch debounce and logging
   handleReedSwitch();

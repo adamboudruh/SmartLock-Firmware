@@ -1,15 +1,15 @@
 #include "InputHandler.h"
-#include "Tag.h"
 #include "PendingCommands.h"
 #include "Helpers.h"
 #include "OutputHandler.h"
 #include "WiFiHandler.h"
 #include "Whitelist.h"
+#include "Status.h"
 #include <Arduino.h>
 
-#define REED_PIN 13
-#define LOCK_BUTTON_PIN 12
-#define STATE_BUTTON 14
+#define REED_PIN 14
+#define LOCK_BUTTON_PIN 13
+#define STATE_BUTTON_PIN 27
 
 // state for reed switch
 const unsigned long DEBOUNCE_MS = 50;
@@ -22,12 +22,6 @@ unsigned long lastButtonPress = 0;
 String lastScannedUid = "";
 unsigned long lastScanTs = 0;
 const unsigned long RFID_DEBOUNCE_MS = 2000;
-
-// Define the whitelist array and its size
-// const Tag whitelist[] = {
-//   {"Green", "046AF0603E6180"},
-//   {"Red",   "04C9B7603E6180"}
-// };
 
 void initialReedSetup() {
 	lastSwitchReading = digitalRead(REED_PIN);
@@ -84,10 +78,12 @@ bool handleRfidTag(const String& uid) {
     pendingUnlock = true;
     isLocked = false;
     sendStateEvent("UNLOCK_SUCCESS", uid.c_str());
+    setStatus(StatusMode::UnlockSuccess);    
     return true;
   }
   Serial.println("No match: unknown tag");
   sendStateEvent("FAIL_UNLOCK", uid.c_str());
+  setStatus(StatusMode::UnlockFail); 
   return false;
 }
 
@@ -102,6 +98,7 @@ void handleLockButton() {
       pendingLock = true;
       isLocked = true;
       sendStateEvent("LOCK");
+      setStatus(StatusMode::Lock);
       lastButtonPress = millis();
     }
   }
@@ -112,7 +109,7 @@ void handleLockButton() {
 void handleStateButton() {
   static int lastButtonState = HIGH;
   static unsigned long lastButtonPress = 0;
-  int buttonState = digitalRead(STATE_BUTTON);
+  int buttonState = digitalRead(STATE_BUTTON_PIN);
 
   if (buttonState == LOW && lastButtonState == HIGH) {
     if (millis() - lastButtonPress > 200) {

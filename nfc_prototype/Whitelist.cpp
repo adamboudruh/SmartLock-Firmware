@@ -1,4 +1,5 @@
 #include "Whitelist.h"
+#include "Encryption.h"
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 
@@ -62,8 +63,9 @@ bool saveWhitelist(const String& json) { // receives the json array containing t
 }
 
 bool checkUID(const String& uid, String& outName) {
+    String hashedUid = hashUID(uid); // ← hash before comparing
     for (int i = 0; i < whitelistSize; i++) {
-        if (uid.equalsIgnoreCase(whitelist[i].uid)) {
+        if (hashedUid.equalsIgnoreCase(whitelist[i].uid)) {
             outName = whitelist[i].name;
             return true;
         }
@@ -73,7 +75,7 @@ bool checkUID(const String& uid, String& outName) {
 
 void printWhitelist() {
     // --- Flash contents ---
-    Serial.println("[Whitelist] === FLASH ===");
+    Serial.println("[Whitelist] === FLASH MEMORY ===");
     if (!LittleFS.begin(true)) {
       Serial.println("[Whitelist] LittleFS mount failed");
     }
@@ -85,16 +87,5 @@ void printWhitelist() {
         File f = LittleFS.open(WHITELIST_PATH, "r");
         Serial.println(f.readString());
         f.close();
-    }
-
-    // --- In-memory contents ---
-    Serial.println("[Whitelist] === MEMORY ===");
-    if (whitelistSize == 0) {
-        Serial.println("[Whitelist] Empty — no tags loaded in memory");
-        return;
-    }
-    Serial.printf("[Whitelist] %d tag(s):\n", whitelistSize);
-    for (int i = 0; i < whitelistSize; i++) {
-        Serial.printf("  [%d] name=%-20s uid=%s\n", i, whitelist[i].name.c_str(), whitelist[i].uid.c_str());
     }
 }

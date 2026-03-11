@@ -2,7 +2,7 @@
 #include <Arduino.h>
 #include "WifiHandler.h"
 
-const int  RELAY_PIN  = 15;     // INx to your relay channel
+const int  RELAY_PIN  = 26;     // INx to your relay channel
 const bool ACTIVE_LOW = true;   // MOST 2-ch relay boards are low-trigger: LOW = ON
 bool isLocked = true;          // assume locked on boot
 bool isAjar = false;          // assume closed on boot
