@@ -1,6 +1,6 @@
 #include "Whitelist.h"
 #include "Encryption.h"
-#include <LittleFS.h>
+#include "Storage.h"
 #include <ArduinoJson.h>
 
 #define WHITELIST_PATH "/whitelist.json"
@@ -14,8 +14,9 @@ struct Tag {
 static Tag whitelist[MAX_TAGS];
 static int whitelistSize = 0;
 
+// parses given JSON string into in memory whitelist
 static void parseIntoMemory(const String& json) {
-    StaticJsonDocument<2048> doc;
+    DynamicJsonDocument doc(2048);
     if (deserializeJson(doc, json) != DeserializationError::Ok) {
         Serial.println("[Whitelist] Failed to parse JSON");
         return;
@@ -32,33 +33,19 @@ static void parseIntoMemory(const String& json) {
 }
 
 void loadWhitelist() {
-    if (!LittleFS.begin(true)) {  // pass true to format on mount failure
-        Serial.println("[Whitelist] LittleFS mount failed even after format");
-        return;
-    }
-    if (!LittleFS.begin()) {
-        Serial.println("[Whitelist] LittleFS mount failed");
-        return;
-    }
-    if (!LittleFS.exists(WHITELIST_PATH)) {
+    String json = readFile(WHITELIST_PATH);
+    if (json.isEmpty()) {
         Serial.println("[Whitelist] No cached whitelist found, using empty list");
         return;
     }
-    File f = LittleFS.open(WHITELIST_PATH, "r");
-    String json = f.readString();
-    f.close();
     Serial.println("[Whitelist] Loaded from flash, parsing...");
     parseIntoMemory(json);
 }
 
 bool saveWhitelist(const String& json) { // receives the json array containing the new keys from the server
-    if (!LittleFS.begin()) return false;
-    File f = LittleFS.open(WHITELIST_PATH, "w");
-    if (!f) return false;
-    f.print(json);
-    f.close();
+    if (!writeFile(WHITELIST_PATH, json)) return false; // attempt to write to flash, if it fails return false
     Serial.println("[Whitelist] Saved to flash");
-    parseIntoMemory(json); // rebuild the in memory array right away
+    parseIntoMemory(json);
     return true;
 }
 
@@ -73,19 +60,12 @@ bool checkUID(const String& uid, String& outName) {
     return false;
 }
 
-void printWhitelist() {
-    // --- Flash contents ---
+void printWhitelist() { // for debuggiong, sometimes I wanna see what's under the hood
     Serial.println("[Whitelist] === FLASH MEMORY ===");
-    if (!LittleFS.begin(true)) {
-      Serial.println("[Whitelist] LittleFS mount failed");
-    }
-    if (!LittleFS.begin()) {
-        Serial.println("[Whitelist] LittleFS mount failed");
-    } else if (!LittleFS.exists(WHITELIST_PATH)) {
+    String json = readFile(WHITELIST_PATH);
+    if (json.isEmpty()) {
         Serial.println("[Whitelist] No file found on flash");
     } else {
-        File f = LittleFS.open(WHITELIST_PATH, "r");
-        Serial.println(f.readString());
-        f.close();
+        Serial.println(json);
     }
 }

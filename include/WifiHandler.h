@@ -5,5 +5,7 @@ void initWifi();
 void initWebSocket();
 void handleWebSocket();
 void sendStateEvent (const char* eventType, const char* uid = nullptr);
+void startReconnectTask(); // call in loop() — non-blocking retry
+void sendCachedEvents();
 
 #endif

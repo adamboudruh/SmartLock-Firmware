@@ -5,11 +5,10 @@
 #include "WiFiHandler.h"
 #include "Whitelist.h"
 #include "Status.h"
+#include "Pins.h"
+#include "Buzzer.h"
+#include "EventCache.h"
 #include <Arduino.h>
-
-#define REED_PIN 14
-#define LOCK_BUTTON_PIN 13
-#define STATE_BUTTON_PIN 27
 
 // state for reed switch
 const unsigned long DEBOUNCE_MS = 50;
@@ -78,7 +77,8 @@ bool handleRfidTag(const String& uid) {
     pendingUnlock = true;
     isLocked = false;
     sendStateEvent("UNLOCK_SUCCESS", uid.c_str());
-    setStatus(StatusMode::UnlockSuccess);    
+    setStatus(StatusMode::UnlockSuccess);
+    playUnlockTone();
     return true;
   }
   Serial.println("No match: unknown tag");
@@ -92,33 +92,59 @@ void handleLockButton() {
   static int lastButtonState = HIGH;
   int buttonState = digitalRead(LOCK_BUTTON_PIN); // ← was BUTTON_PIN, now fixed
 
-  if (buttonState == LOW && lastButtonState == HIGH && !isLocked) {
-    if (millis() - lastButtonPress > 200) {
+  if (buttonState == LOW && lastButtonState == HIGH) {
+    if (millis() - lastButtonPress > 200 && !isLocked) {
       Serial.println("Button pressed -> LOCK");
       pendingLock = true;
       isLocked = true;
-      sendStateEvent("LOCK");
+      sendStateEvent("BUTTON_LOCK");
       setStatus(StatusMode::Lock);
       lastButtonPress = millis();
+    }
+    printWhitelist();
+    if (hasCachedEvents()) {
+        Serial.printf("[Debug] Cached events: %d\n", getCachedEventCount());
+        Serial.println(getCachedEvents());
+    } else {
+        Serial.println("[Debug] No cached events");
     }
   }
   lastButtonState = buttonState;
 }
 
-// handle state button input - prints current lock state to serial
-void handleStateButton() {
-  static int lastButtonState = HIGH;
-  static unsigned long lastButtonPress = 0;
-  int buttonState = digitalRead(STATE_BUTTON_PIN);
+// // handle state button input - prints current lock state to serial
+// void handleStateButton() {
+//   static int lastButtonState = HIGH;
+//   static unsigned long lastButtonPress = 0;
+//   int buttonState = digitalRead(STATE_BUTTON_PIN);
 
-  if (buttonState == LOW && lastButtonState == HIGH) {
+//   if (buttonState == LOW && lastButtonState == HIGH) {
+//     if (millis() - lastButtonPress > 200) {
+//       Serial.printf("[%lu] Lock: %s | Door: %s\n",
+//           millis(),
+//           isLocked ? "LOCKED" : "UNLOCKED",
+//           isAjar   ? "AJAR"   : "CLOSED"
+//       );
+//       printWhitelist();
+//       lastButtonPress = millis();
+//     }
+//   }
+//   lastButtonState = buttonState;
+// }
+
+// handle unlock button input - unlocks door when pressed if not already unlocked, also prints state to serial for debugging
+void handleUnlockButton() {
+  static int lastButtonState = HIGH;
+  int buttonState = digitalRead(UNLOCK_BUTTON_PIN);
+
+  if (buttonState == LOW && lastButtonState == HIGH && isLocked) {
     if (millis() - lastButtonPress > 200) {
-      Serial.printf("[%lu] Lock: %s | Door: %s\n",
-          millis(),
-          isLocked ? "LOCKED" : "UNLOCKED",
-          isAjar   ? "AJAR"   : "CLOSED"
-      );
-      printWhitelist();
+      Serial.println("Button pressed -> UNLOCK");
+      pendingUnlock = true;
+      isLocked = false;
+      sendStateEvent("BUTTON_UNLOCK");
+      setStatus(StatusMode::Unlock);
+      playUnlockTone();
       lastButtonPress = millis();
     }
   }

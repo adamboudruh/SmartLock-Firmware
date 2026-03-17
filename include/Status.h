@@ -6,7 +6,8 @@ enum class StatusMode {
     Connected,
     UnlockSuccess,
     UnlockFail,
-    Lock
+    Lock,
+    Unlock
 };
 
 void setStatus(StatusMode mode);

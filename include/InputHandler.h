@@ -9,6 +9,7 @@ void initialReedSetup();
 bool handleRfidTag(const String& uid);
 void handleReedSwitch();
 void handleLockButton();
-void handleStateButton();
+// void handleStateButton();
+void handleUnlockButton();
 
 #endif

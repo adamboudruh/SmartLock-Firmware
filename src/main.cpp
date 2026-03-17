@@ -6,14 +6,12 @@
 #include "Helpers.h"
 #include "PendingCommands.h"
 #include "Whitelist.h"
+#include "Storage.h"
 #include "Status.h"
+#include "Pins.h"
+#include "Buzzer.h"
+#include "RtcHandler.h"
 #include <Arduino.h>
-
-#define RST_PIN 22
-#define SS_PIN  5
-#define REED_PIN 13
-#define BUTTON_PIN 12
-const int  RELAY_PIN  = 26;     // INx to your relay channel
 
 
 const bool REINIT_AFTER_RELAY = true; // set true to re-init RC522 after relay action if noise causes hangs
@@ -32,6 +30,9 @@ void setup() {
   // initialize the status LED
   initStatus();
   
+  // initialize the buzzer
+  initBuzzer();
+
 	// going out to relay module to control solenoid
   pinMode(RELAY_PIN, OUTPUT);
 
@@ -43,15 +44,26 @@ void setup() {
 	pinMode(REED_PIN, INPUT_PULLUP);
 	initialReedSetup();
 
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pinMode(UNLOCK_BUTTON_PIN, INPUT_PULLUP);
+  pinMode(LOCK_BUTTON_PIN, INPUT_PULLUP);
 
   Serial.println("RC522 ready. Tap a card to match against green/red tags...");
 
+  initStorage();    // mount LittleFS before any file operations
   loadWhitelist();  // load whitelist from flash to memory
 
   setStatus(StatusMode::Connecting);
   initWifi();
+
+  initRTC(); // initialize real time clock
+  if (rtcLostPower()) {
+    Serial.println("[RTC] Time is stale — will sync from NTP");
+    syncRtcFromNTP();
+  } else {
+    Serial.println("[RTC] RTC in good shape, no need to sync");
+  }
   initWebSocket();
+  startReconnectTask();
 }
 
 void loop() {
@@ -63,7 +75,8 @@ void loop() {
 
   // handle button input
   handleLockButton();
-  handleStateButton();
+  // handleStateButton();
+  handleUnlockButton();
 
   // handle any incoming WS commands
   handleWebSocket();
@@ -88,9 +101,7 @@ void loop() {
   Serial.println(uid);
 
   // check RFID reading against whitelist
-  if (handleRfidTag(uid)) {
-    // If a known tag was detected, optionally wait or do any additional actions here
-  }
+  handleRfidTag(uid);
 
   // Clean up reader session
   mfrc522.PICC_HaltA();

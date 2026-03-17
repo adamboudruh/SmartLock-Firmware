@@ -1,9 +1,11 @@
 #include "Status.h"
+#include "Pins.h"
 #include <Arduino.h>
+#include <math.h>
 
-#define PIN_R 4
-#define PIN_G 2
-#define PIN_B 15
+#define CH_R 5
+#define CH_G 6
+#define CH_B 7
 
 // state
 static StatusMode currentMode   = StatusMode::Connecting;
@@ -14,9 +16,9 @@ static unsigned long lastToggle = 0;
 static unsigned long modeEnteredAt = 0;
 
 static void setRGB(bool r, bool g, bool b) {
-    digitalWrite(PIN_R, r ? HIGH : LOW);
-    digitalWrite(PIN_G, g ? HIGH : LOW);
-    digitalWrite(PIN_B, b ? HIGH : LOW);
+    ledcWrite(CH_R, r ? 255 : 0);
+    ledcWrite(CH_G, g ? 255 : 0);
+    ledcWrite(CH_B, b ? 255 : 0);
 }
 
 static void ledOff() {
@@ -24,6 +26,9 @@ static void ledOff() {
 }
 
 void setStatus(StatusMode mode) {
+    // Don't flash "connecting" if we're already in offline mode — stay yellow
+    if (mode == StatusMode::Connecting && currentMode == StatusMode::Offline) return;
+
     // Save previous mode so one-shot animations can restore it
     if (mode != StatusMode::UnlockSuccess && mode != StatusMode::UnlockFail) {
         previousMode = mode;
@@ -36,9 +41,9 @@ void setStatus(StatusMode mode) {
 }
 
 void initStatus() {
-    pinMode(PIN_R, OUTPUT);
-    pinMode(PIN_G, OUTPUT);
-    pinMode(PIN_B, OUTPUT);
+    ledcSetup(CH_R, 5000, 8); ledcAttachPin(PIN_R, CH_R);
+    ledcSetup(CH_G, 5000, 8); ledcAttachPin(PIN_G, CH_G);
+    ledcSetup(CH_B, 5000, 8); ledcAttachPin(PIN_B, CH_B);
     ledOff();
 }
 
@@ -63,14 +68,26 @@ void updateStatus() {
         }
 
         case StatusMode::Connected: {
-            // Solid blue
-            setRGB(false, false, true);
+            // Smooth RGB sine-wave rainbow — channels 120° apart
+            float t = (float)(now % 4000) / 4000.0f * 2.0f * (float)M_PI;
+            ledcWrite(CH_R, (uint8_t)((sinf(t)              + 1.0f) * 127.5f));
+            ledcWrite(CH_G, (uint8_t)((sinf(t + 2.0944f)    + 1.0f) * 127.5f));
+            ledcWrite(CH_B, (uint8_t)((sinf(t + 4.1888f)    + 1.0f) * 127.5f));
             break;
         }
 
         case StatusMode::Lock: {
             // Solid red for 1 second then restore
             setRGB(true, false, false);
+            if (now - modeEnteredAt >= 1000) {
+            currentMode = StatusMode::Connected;
+            }
+            break;
+        }
+
+        case StatusMode::Unlock: {
+            // Solid green for 1 second then restore
+            setRGB(false, true, false);
             if (now - modeEnteredAt >= 1000) {
             currentMode = StatusMode::Connected;
             }
