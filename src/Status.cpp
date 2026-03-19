@@ -26,11 +26,14 @@ static void ledOff() {
 }
 
 void setStatus(StatusMode mode) {
-    // Don't flash "connecting" if we're already in offline mode — stay yellow
+    // stay yellow if already in offline mode
     if (mode == StatusMode::Connecting && currentMode == StatusMode::Offline) return;
 
-    // Save previous mode so one-shot animations can restore it
-    if (mode != StatusMode::UnlockSuccess && mode != StatusMode::UnlockFail) {
+    // save previous mode so one-shot animations can restore it
+    if (mode != StatusMode::UnlockSuccess &&
+        mode != StatusMode::UnlockFail    &&
+        mode != StatusMode::Lock          &&
+        mode != StatusMode::Unlock) {
         previousMode = mode;
     }
     currentMode = mode;
@@ -53,7 +56,7 @@ void updateStatus() {
     switch (currentMode) {
 
         case StatusMode::Connecting: {
-            // Flash red every 300ms
+            // flash red every 300ms
             if (now - lastToggle >= 300) {
                 ledState = !ledState;
                 setRGB(ledState, false, false);
@@ -68,7 +71,7 @@ void updateStatus() {
         }
 
         case StatusMode::Connected: {
-            // Smooth RGB sine-wave rainbow — channels 120° apart
+            // Smooth RGB sine-wave rainbow, channels 120° apart
             float t = (float)(now % 4000) / 4000.0f * 2.0f * (float)M_PI;
             ledcWrite(CH_R, (uint8_t)((sinf(t)              + 1.0f) * 127.5f));
             ledcWrite(CH_G, (uint8_t)((sinf(t + 2.0944f)    + 1.0f) * 127.5f));
@@ -80,7 +83,7 @@ void updateStatus() {
             // Solid red for 1 second then restore
             setRGB(true, false, false);
             if (now - modeEnteredAt >= 1000) {
-            currentMode = StatusMode::Connected;
+                currentMode = previousMode  ;
             }
             break;
         }
@@ -89,7 +92,7 @@ void updateStatus() {
             // Solid green for 1 second then restore
             setRGB(false, true, false);
             if (now - modeEnteredAt >= 1000) {
-            currentMode = StatusMode::Connected;
+                currentMode = previousMode;
             }
             break;
         }
@@ -97,7 +100,7 @@ void updateStatus() {
         case StatusMode::UnlockSuccess: { // flash green 3 times
             if (flashCount >= 6) {
                 ledOff();
-                currentMode = StatusMode::Connected;
+                currentMode = previousMode;
                 flashCount  = 0;
                 lastToggle  = 0;
                 break;
@@ -114,7 +117,7 @@ void updateStatus() {
         case StatusMode::UnlockFail: { // flash red 3 times 
             if (flashCount >= 6) {
                 ledOff();
-                currentMode = StatusMode::Connected;
+                currentMode = previousMode;
                 flashCount  = 0;
                 lastToggle  = 0;
                 break;

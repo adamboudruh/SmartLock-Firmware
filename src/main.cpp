@@ -11,6 +11,7 @@
 #include "Pins.h"
 #include "Buzzer.h"
 #include "RtcHandler.h"
+#include "Settings.h"
 #include <Arduino.h>
 
 
@@ -51,6 +52,7 @@ void setup() {
 
   initStorage();    // mount LittleFS before any file operations
   loadWhitelist();  // load whitelist from flash to memory
+  loadSettings();   // load settings from flash to memory
 
   setStatus(StatusMode::Connecting);
   initWifi();
@@ -80,6 +82,9 @@ void loop() {
 
   // handle any incoming WS commands
   handleWebSocket();
+
+  checkSettings(); // check for updated settings on each loop
+  updateBuzzer();    // check if we need to play a tone based on recent events
 
   if (pendingUnlock) {
     pendingUnlock = false;

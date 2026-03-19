@@ -7,7 +7,7 @@
 
 void cacheEvent(const char* event, bool isLocked, bool isAjar, const char* uid, const String& timestamp) {
     // read existing cache
-    DynamicJsonDocument doc(8192);
+    DynamicJsonDocument doc(32768);
     String existing = readFile(CACHE_PATH);
     if (!existing.isEmpty()) {
         deserializeJson(doc, existing);
@@ -18,7 +18,7 @@ void cacheEvent(const char* event, bool isLocked, bool isAjar, const char* uid, 
     if (arr.size() >= MAX_CACHED_EVENTS) {
         Serial.println("[EventCache] Cache full, dropping oldest event");
         // remove first element by rebuilding as ArduinoJson doesn't support shift
-        DynamicJsonDocument newDoc(8192);
+        DynamicJsonDocument newDoc(32768);
         JsonArray newArr = newDoc.to<JsonArray>();
         bool skippedFirst = false;
         for (JsonObject obj : arr) {
@@ -61,7 +61,7 @@ void clearEventCache() {
 int getCachedEventCount() {
     String json = readFile(CACHE_PATH);
     if (json.isEmpty()) return 0;
-    DynamicJsonDocument doc(8192);
+    DynamicJsonDocument doc(32768);
     deserializeJson(doc, json);
     return doc.as<JsonArray>().size();
 }

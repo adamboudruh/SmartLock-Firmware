@@ -11,6 +11,7 @@
 #include "Encryption.h"
 #include "EventCache.h"
 #include "RtcHandler.h"
+#include "Settings.h"
 
 using namespace websockets;
 
@@ -29,7 +30,8 @@ enum class WsAction {
 // supported state events (outgoing to backend)
 enum class StateEvent {
     INIT,            // device just connected, request SYNC
-    LOCK,            // physical button lock
+    BUTTON_LOCK,     // physical button lock
+    AUTO_LOCK,       // auto-lock after timeout
     BUTTON_UNLOCK,   // physical button unlock
     UNLOCK_SUCCESS,  // RFID key matched, unlocked
     FAIL_UNLOCK,     // RFID key not recognized
@@ -50,6 +52,9 @@ WebsocketsClient client;
 
 bool isOnline = false;
 static bool wsConnecting = false;
+
+static volatile bool wsNeedsReconnect = false; // ws reconnect flag
+static bool offlineSyncInProgress = false; // flag to prevent multiple simultaneous offline syncs
 
 static unsigned long lastWifiRetry = 0;
 static unsigned long lastWsRetry   = 0;
@@ -92,8 +97,8 @@ void onMessageCallback(WebsocketsMessage message) {
     String payload = message.data(); // Get the WebSocket message as a string
     Serial.printf("[WebSocket] Message Received: %s\n", payload.c_str());
 
-    // Parse the JSON message
-    StaticJsonDocument<256> doc; // Allocate a JSON document (adjust size as necessary)
+    // parse the JSON message
+    StaticJsonDocument<4096> doc; // Allocate a JSON document (adjust size as necessary)
     DeserializationError error = deserializeJson(doc, payload);
 
     if (error) {
@@ -102,7 +107,7 @@ void onMessageCallback(WebsocketsMessage message) {
         return; // Return if there’s a parsing issue
     }
 
-    // Extract the "action" field
+    // extract the "action" field
     const char* action = doc["action"];
     
     if (strcmp(action, "AUTH_OK") == 0) {
@@ -117,19 +122,29 @@ void onMessageCallback(WebsocketsMessage message) {
     } else if (strcmp(action, "SYNC_OK") == 0) {
         Serial.println("[WebSocket] Backend confirmed, clearing cache");
         clearEventCache();
+        offlineSyncInProgress = false;
     } else if (strcmp(action, "LOCK") == 0) {
         Serial.println("[Command] LOCK received. Locking the relay.");
         pendingLock = true; // activate the relay (lock)
         isLocked = true;
+        notifyLocked(); // for settings
     } else if (strcmp(action, "UNLOCK") == 0) {
         Serial.println("[Command] UNLOCK received. Unlocking the relay.");
         pendingUnlock = true; // deactivate the relay (unlock)
         isLocked = false;
+        notifyUnlocked(); // for settings
     } else if (strcmp(action, "SYNC") == 0) {
         Serial.println("[Command] SYNC received. Saving new whitelist in memory.");
+
         String whitelistJson;
         serializeJson(doc["whitelist"], whitelistJson);
         saveWhitelist(whitelistJson);
+
+        if (doc.containsKey("settings")) {
+            String settingsJson;
+            serializeJson(doc["settings"], settingsJson);
+            saveSettings(settingsJson);
+        }
     } else {
         Serial.println("[WebSocket] Unknown action received.");
     }
@@ -228,6 +243,10 @@ void initWebSocket() {
 }
 
 void handleWebSocket() {
+    if (wsNeedsReconnect) {
+        wsNeedsReconnect = false;
+        initWebSocket();
+    }
     if (client.available()) {
         client.poll();
     }
@@ -264,7 +283,7 @@ void reconnectTask(void* param) {
         if (!client.available() && !wsConnecting) {
             wsConnecting = true;
             Serial.println("[Reconnect] WS down — attempting reconnect...");
-            initWebSocket();
+            wsNeedsReconnect = true; // reset the flag before attempting reconnect
             wsConnecting = false;
         }
 
@@ -286,19 +305,21 @@ void startReconnectTask() {
 }
 
 void sendCachedEvents() {
-    if (!client.available()) return;
+    if (!client.available() || offlineSyncInProgress) return;
 
+    offlineSyncInProgress = true;
     Serial.println("[EventCache] Sending cached events...");
     String cached = getCachedEvents();
     if (cached.isEmpty()) {
         Serial.println("[EventCache] No cached events to send, syncing normally.");
+        offlineSyncInProgress = false;
         return;
     }
 
-    DynamicJsonDocument doc(8192);
+    DynamicJsonDocument doc(32768);
     doc["event"] = "OFFLINE_SYNC";
 
-    DynamicJsonDocument eventsDoc(8192);
+    DynamicJsonDocument eventsDoc(32768);
     deserializeJson(eventsDoc, cached);
     doc["events"] = eventsDoc.as<JsonArray>();
 

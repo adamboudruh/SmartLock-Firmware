@@ -8,6 +8,8 @@
 #include "Pins.h"
 #include "Buzzer.h"
 #include "EventCache.h"
+#include "Settings.h"
+#include "Encryption.h"
 #include <Arduino.h>
 
 // state for reed switch
@@ -41,10 +43,12 @@ void handleReedSwitch() {
         isAjar = true;
         Serial.printf("[%lu] Door: OPEN\n", millis());
         sendStateEvent("DOOR_OPEN");
+        notifyDoorOpened(); // for settings
       } else {
         isAjar = false;
         Serial.printf("[%lu] Door: CLOSED\n", millis());
         sendStateEvent("DOOR_CLOSED");
+        notifyDoorClosed(); // for settings
       }
     }
   }
@@ -70,19 +74,20 @@ bool handleRfidTag(const String& uid) {
   lastScannedUid = uid;
   lastScanTs = now;
 
+  String hashedUid = hashUID(uid);
   // Rest of your existing logic below, unchanged
   String keyName;
   if (checkUID(uid, keyName)) {
     Serial.printf("Match: %s -> UNLOCK\n", keyName.c_str());
     pendingUnlock = true;
     isLocked = false;
-    sendStateEvent("UNLOCK_SUCCESS", uid.c_str());
+    sendStateEvent("UNLOCK_SUCCESS", hashedUid.c_str());
     setStatus(StatusMode::UnlockSuccess);
-    playUnlockTone();
+    notifyUnlocked(); // for settings
     return true;
   }
   Serial.println("No match: unknown tag");
-  sendStateEvent("FAIL_UNLOCK", uid.c_str());
+  sendStateEvent("FAIL_UNLOCK", hashedUid.c_str());
   setStatus(StatusMode::UnlockFail); 
   return false;
 }
@@ -99,6 +104,7 @@ void handleLockButton() {
       isLocked = true;
       sendStateEvent("BUTTON_LOCK");
       setStatus(StatusMode::Lock);
+      notifyLocked(); // for settings
       lastButtonPress = millis();
     }
     printWhitelist();
@@ -144,7 +150,7 @@ void handleUnlockButton() {
       isLocked = false;
       sendStateEvent("BUTTON_UNLOCK");
       setStatus(StatusMode::Unlock);
-      playUnlockTone();
+      notifyUnlocked(); // for settings
       lastButtonPress = millis();
     }
   }
